@@ -182,7 +182,7 @@ class TSRLibrary(object):
 
                     return [yaml_chain]
 
-            except Exception, e:
+            except Exception as e:
                 logger.error('Failed to load TSRChain: %s - (Chain: %s)' % (str(e), chain))
                 raise IOError('Failed to load TSRChain: %s - (Chain: %s)' % (str(e), chain))
         

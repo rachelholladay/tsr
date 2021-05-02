@@ -28,7 +28,7 @@
 
 import numpy
 import numpy.random
-import util
+from . import util
 from numpy import pi
 
 NANBW = numpy.ones(6)*float('nan')
