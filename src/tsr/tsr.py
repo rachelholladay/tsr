@@ -28,6 +28,7 @@
 
 import numpy
 import numpy.random
+import functools
 from . import util
 from numpy import pi
 
@@ -61,8 +62,7 @@ class TSR(object):
         Bw_interval = Bw_cont[3:6, 1] - Bw_cont[3:6, 0]
         Bw_interval = numpy.minimum(Bw_interval, 2*pi)
 
-        from util import wrap_to_interval
-        Bw_cont[3:6, 0] = wrap_to_interval(Bw_cont[3:6, 0])
+        Bw_cont[3:6, 0] = util.wrap_to_interval(Bw_cont[3:6, 0])
         Bw_cont[3:6, 1] = Bw_cont[3:6, 0] + Bw_interval
 
         self._Bw_cont = Bw_cont
@@ -179,8 +179,7 @@ class TSR(object):
         @return check a (3,) vector of True if within and False if outside
         """
         # Unwrap rpy to Bw_cont.
-        from util import wrap_to_interval
-        rpy = wrap_to_interval(rpy, lower=Bw[:, 0])
+        rpy = util.wrap_to_interval(rpy, lower=Bw[:, 0])
 
         # Check bounds condition on RPY component.
         rpycheck = [False] * 3
@@ -271,7 +270,7 @@ class TSR(object):
         if not all(self.is_valid(xyzrpy)):
             raise ValueError('Invalid xyzrpy', xyzrpy)
         Tw = TSR.xyzrpy_to_trans(xyzrpy)
-        trans = reduce(numpy.dot, [self.T0_w, Tw, self.Tw_e])
+        trans = functools.reduce(numpy.dot, [self.T0_w, Tw, self.Tw_e])
         return trans
 
     def to_xyzrpy(self, trans):
@@ -280,11 +279,11 @@ class TSR(object):
         @param  trans  4x4 transform
         @return xyzrpy 6x1 vector of Bw values
         """
-        Tw = reduce(numpy.dot, [numpy.linalg.inv(self.T0_w),
+        Tw = functools.reduce(numpy.dot, [numpy.linalg.inv(self.T0_w),
                                 trans,
                                 numpy.linalg.inv(self.Tw_e)])
         xyz, rot = Tw[0:3, 3], Tw[0:3, 0:3]
-        rpycheck, rpy = TSR.rot_within_rpy_bounds(rot, self._Bw_cont)
+        rpycheck, rpy = TSR.rot_within_rpy_bounds(rot, self._Bw_cont[3:6, :])
         if not all(rpycheck):
             rpy = TSR.rot_to_rpy(rot)
         return numpy.hstack((xyz, rpy))
@@ -325,7 +324,7 @@ class TSR(object):
         """
         # Extract XYZ and rot components of input and TSR.
         Bw_xyz, Bw_rpy = self._Bw_cont[0:3, :], self._Bw_cont[3:6, :]
-        xyz, rot = trans[0:3, :], trans[0:3, 0:3]
+        xyz, rot = trans[0:3, 3], trans[0:3, 0:3]
         # Check bounds condition on XYZ component.
         xyzcheck = TSR.xyz_within_bounds(xyz, Bw_xyz)
         # Check bounds condition on rot component.
@@ -340,6 +339,7 @@ class TSR(object):
         @return dist Geodesic distance to TSR
         @return bwopt Closest Bw value to trans
         """
+
         if all(self.contains(trans)):
             return 0., self.to_xyzrpy(trans)
 
@@ -378,8 +378,7 @@ class TSR(object):
                                 if numpy.isnan(x) else x
                                 for i, x in enumerate(xyzrpy)])
         # Unwrap rpy to [-pi, pi]
-        from util import wrap_to_interval
-        Bw_sample[3:6] = wrap_to_interval(Bw_sample[3:6])
+        Bw_sample[3:6] = util.wrap_to_interval(Bw_sample[3:6])
         return Bw_sample
 
     def sample(self, xyzrpy=NANBW):
@@ -610,7 +609,7 @@ class TSRChain(object):
         """
         return self.to_transform(self.sample_xyzrpy(xyzrpy_list))
 
-    def distance(self, trans):
+    def distance(self, trans, r=1.0):
         """
         Computes the Geodesic Distance from the TSR chain to a transform
         @param trans 4x4 transform
@@ -622,7 +621,7 @@ class TSRChain(object):
         def objective(xyzrpy_list):
             xyzrpy_stack = xyzrpy_list.reshape(len(self.TSRs), 6)
             tsr_trans = self.to_transform(xyzrpy_stack)
-            return util.GeodesicDistance(tsr_trans, trans)
+            return util.GeodesicDistance(tsr_trans, trans, r=r)
 
         bwinit = []
         bwbounds = []

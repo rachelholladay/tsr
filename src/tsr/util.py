@@ -29,7 +29,47 @@ def wrap_to_interval(angles, lower=-numpy.pi):
     @param lower optional lower bound on wrapping interval
     @type  lower float or numpy.array
     """
+    if any(numpy.isnan(angles)):
+        return angles
     return (angles - lower) % (2 * numpy.pi) + lower
+
+#TODO this is copied from pb_robot/transformations.py. 
+def rotation_from_matrix(matrix):
+    """Return rotation angle and axis from rotation matrix.
+    >>> angle = (random.random() - 0.5) * (2*math.pi)
+    >>> direc = numpy.random.random(3) - 0.5
+    >>> point = numpy.random.random(3) - 0.5
+    >>> R0 = rotation_matrix(angle, direc, point)
+    >>> angle, direc, point = rotation_from_matrix(R0)
+    >>> R1 = rotation_matrix(angle, direc, point)
+    >>> is_same_transform(R0, R1)
+    True
+    """
+    R = numpy.array(matrix, dtype=numpy.float64, copy=False)
+    R33 = R[:3, :3]
+    # direction: unit eigenvector of R33 corresponding to eigenvalue of 1
+    l, W = numpy.linalg.eig(R33.T)
+    i = numpy.where(abs(numpy.real(l) - 1.0) < 1e-1)[0] #XXX was < 1e-8
+    if not len(i):
+        raise ValueError("no unit eigenvector corresponding to eigenvalue 1")
+    direction = numpy.real(W[:, i[-1]]).squeeze()
+    # point: unit eigenvector of R33 corresponding to eigenvalue of 1
+    l, Q = numpy.linalg.eig(R)
+    i = numpy.where(abs(numpy.real(l) - 1.0) < 1e-1)[0] #XXX was < 1e-8 
+    if not len(i):
+        raise ValueError("no unit eigenvector corresponding to eigenvalue 1")
+    point = numpy.real(Q[:, i[-1]]).squeeze()
+    point /= point[3]
+    # rotation angle depending on direction
+    cosa = (numpy.trace(R33) - 1.0) / 2.0
+    if abs(direction[2]) > 1e-8:
+        sina = (R[1, 0] + (cosa-1.0)*direction[0]*direction[1]) / direction[2]
+    elif abs(direction[1]) > 1e-8:
+        sina = (R[0, 2] + (cosa-1.0)*direction[0]*direction[2]) / direction[1]
+    else:
+        sina = (R[2, 1] + (cosa-1.0)*direction[1]*direction[2]) / direction[0]
+    angle = math.atan2(sina, cosa)
+    return angle, direction, point
 
 
 def GeodesicError(t1, t2):
@@ -42,7 +82,13 @@ def GeodesicError(t1, t2):
     """
     trel = numpy.dot(numpy.linalg.inv(t1), t2)
     trans = numpy.dot(t1[0:3, 0:3], trel[0:3, 3])
-    angle,direction,point = (trel)
+    #angle = numpy.dot(t1[0:3, 0:3], openravepy.axisAngleFromRotationMatrix(trel[0:3, 0:3]))
+    try:
+        omega, _, _ = rotation_from_matrix(trel)
+    except:
+        omega, _, _ = rotation_from_matrix(-trel)
+    angle = numpy.linalg.norm(omega) 
+    #angle,direction,point = (trel)
     return numpy.hstack((trans, angle))
 
 
